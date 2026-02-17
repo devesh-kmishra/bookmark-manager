@@ -39,7 +39,6 @@ export default function BookmarkList({ initialBookmarks }: Props) {
             event: "*",
             schema: "public",
             table: "bookmarks",
-            filter: `user_id=eq.${userId}`,
           },
           (payload) => {
             if (payload.eventType === "INSERT") {
