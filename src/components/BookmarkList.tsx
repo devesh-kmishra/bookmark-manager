@@ -21,37 +21,53 @@ export default function BookmarkList({ initialBookmarks }: Props) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const channel = supabase
-      .channel("bookmarks-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookmarks",
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newBookmark = payload.new as Bookmark;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-            setBookmarks((prev) => {
-              const exists = prev.some((b) => b.id === newBookmark.id);
-              if (exists) return prev;
-              return [newBookmark, ...prev];
-            });
-          }
+    const setupRealtime = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-          if (payload.eventType === "DELETE") {
-            setBookmarks((prev) => prev.filter((b) => b.id !== payload.old.id));
-          }
-        },
-      )
-      .subscribe();
+      const userId = session?.user.id;
+      if (!userId) return;
+
+      channel = supabase
+        .channel("bookmarks-realtime")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bookmarks",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            if (payload.eventType === "INSERT") {
+              const newBookmark = payload.new as Bookmark;
+
+              setBookmarks((prev) => {
+                const exists = prev.some((b) => b.id === newBookmark.id);
+                if (exists) return prev;
+                return [newBookmark, ...prev];
+              });
+            }
+
+            if (payload.eventType === "DELETE") {
+              setBookmarks((prev) =>
+                prev.filter((b) => b.id !== payload.old.id),
+              );
+            }
+          },
+        )
+        .subscribe();
+    };
+
+    setupRealtime();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, []);
 
   const handleDelete = async (id: string) => {
     setLoadingId(id);
